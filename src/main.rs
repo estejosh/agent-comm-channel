@@ -288,7 +288,9 @@ fn cmd_send(
     println!("sent {id}  {node} -> {to}  [{typ}]");
 }
 
-fn cmd_recv(root: &Path, node: &str, peek: bool) {
+/// Pull, find messages addressed to me I haven't seen, print them, mark seen,
+/// and return them. `quiet` suppresses the "(no new messages)" line (used by watch).
+fn recv_fresh(root: &Path, node: &str, peek: bool, quiet: bool) -> Vec<Message> {
     pull(root);
     let mut seen = load_seen(root, node);
     let fresh: Vec<Message> = all_messages(root)
@@ -296,8 +298,10 @@ fn cmd_recv(root: &Path, node: &str, peek: bool) {
         .filter(|m| !seen.contains(&m.id) && m.from != node && (m.to == node || m.to == "all"))
         .collect();
     if fresh.is_empty() {
-        println!("(no new messages)");
-        return;
+        if !quiet {
+            println!("(no new messages)");
+        }
+        return fresh;
     }
     for m in &fresh {
         print_message(m, false);
@@ -306,12 +310,60 @@ fn cmd_recv(root: &Path, node: &str, peek: bool) {
     if !peek {
         save_seen(root, node, &seen);
     }
+    fresh
 }
 
-fn cmd_watch(root: &Path, node: &str, interval: u64) {
-    println!("watching as '{node}' every {interval}s — Ctrl-C to stop");
+fn cmd_recv(root: &Path, node: &str, peek: bool) {
+    recv_fresh(root, node, peek, false);
+}
+
+/// Run `exec` once per new message, with the message exposed via environment so a
+/// hook (an agent trigger, a script) can act on it without a human in the loop:
+///   CHANNEL_ID, CHANNEL_FROM, CHANNEL_TO, CHANNEL_TYPE, CHANNEL_CREATED,
+///   CHANNEL_THREAD, CHANNEL_IN_REPLY_TO, CHANNEL_BODY
+fn run_exec(exec: &str, m: &Message) {
+    // Shell out via the platform shell so `exec` can be an arbitrary command line.
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut c = Command::new("cmd");
+        c.arg("/C").arg(exec);
+        c
+    };
+    #[cfg(not(windows))]
+    let mut cmd = {
+        let mut c = Command::new("sh");
+        c.arg("-c").arg(exec);
+        c
+    };
+    cmd.env("CHANNEL_ID", &m.id)
+        .env("CHANNEL_FROM", &m.from)
+        .env("CHANNEL_TO", &m.to)
+        .env("CHANNEL_TYPE", &m.typ)
+        .env("CHANNEL_CREATED", &m.created)
+        .env("CHANNEL_THREAD", m.thread.clone().unwrap_or_default())
+        .env("CHANNEL_IN_REPLY_TO", m.in_reply_to.clone().unwrap_or_default())
+        .env("CHANNEL_BODY", &m.body);
+    match cmd.status() {
+        Ok(s) if !s.success() => eprintln!("[watch] exec hook exited with {s} for message {}", m.id),
+        Err(e) => eprintln!("[watch] failed to run exec hook: {e}"),
+        _ => {}
+    }
+}
+
+/// Auto-pull loop: polls forever so a human never has to trigger a sync. Survives
+/// transient git/network failures (a failed pull just yields no new messages this
+/// tick; the next tick retries). With `--exec`, fires a hook per new message.
+fn cmd_watch(root: &Path, node: &str, interval: u64, exec: Option<String>) {
+    let hook = exec.as_deref().map(|e| format!(" -> exec: {e}")).unwrap_or_default();
+    println!("watching as '{node}' every {interval}s{hook} — Ctrl-C to stop");
     loop {
-        cmd_recv(root, node, false);
+        // recv_fresh runs a pull first; a transient failure simply returns [].
+        let fresh = recv_fresh(root, node, false, true);
+        if let Some(e) = &exec {
+            for m in &fresh {
+                run_exec(e, m);
+            }
+        }
         sleep(Duration::from_secs(interval));
     }
 }
@@ -361,7 +413,7 @@ fn usage() -> ! {
          \x20 channel send  --to <node|all> [--type directive|response|status|ack|note]\n\
          \x20               [--thread <id>] [--in-reply-to <id>] \"message body\"\n\
          \x20 channel recv  [--peek] [--node <name>]\n\
-         \x20 channel watch [--interval <secs>] [--node <name>]\n\
+         \x20 channel watch [--interval <secs>] [--exec <cmd>] [--node <name>]\n\
          \x20 channel log   [--limit <n>]\n\
          \x20 channel whoami\n\
          \n\
@@ -420,7 +472,8 @@ fn main() {
             let interval = opt(rest, "--interval")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(30);
-            cmd_watch(&root, &node, interval);
+            let exec = opt(rest, "--exec");
+            cmd_watch(&root, &node, interval, exec);
         }
         "log" => {
             let limit = opt(rest, "--limit").and_then(|s| s.parse().ok()).unwrap_or(20);

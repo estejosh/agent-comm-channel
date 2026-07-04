@@ -66,8 +66,11 @@ channel send --to pc-alpha --type response --in-reply-to 5b7cca88 "done — inde
 # read anything new addressed to me (marks it seen)
 channel recv
 
-# poll forever (good for an agent loop)
+# poll forever (auto-pull; good for an agent loop)
 channel watch --interval 30
+
+# auto-pull AND trigger a handler per new message (no human in the loop)
+channel watch --interval 30 --exec "python handle_message.py"
 
 # see recent traffic from everyone
 channel log --limit 20
@@ -90,15 +93,50 @@ created: 2026-07-04T16:00:18Z
 pull latest and rebuild the indexer
 ```
 
-## Wiring an agent to it
+## Auto-pull (hands-off operation)
 
-Point each PC's agent at a checkout of the channel repo and give it two habits:
+`channel watch` **is** the auto-pull feature: it pulls on every tick so a human never
+has to trigger a sync. It survives transient network/git failures — a failed pull just
+means "no new messages this tick," and the next tick retries.
 
-1. On a timer (or via `channel watch`), run `channel recv` and treat each delivered
-   `directive` as a task and each `response`/`status` as context.
-2. When it finishes work or needs something, `channel send` the result back.
+To make each PC act on messages automatically, add `--exec`:
 
-Because the medium is just Git, you get a permanent, greppable transcript of every
+```bash
+channel watch --interval 30 --exec "python handle_message.py"
+```
+
+For every **new** message, the hook command runs once with the message exposed as
+environment variables — so your handler needs no argument parsing:
+
+| env var               | value                                  |
+|-----------------------|----------------------------------------|
+| `CHANNEL_ID`          | message id                             |
+| `CHANNEL_FROM`        | sender node id                         |
+| `CHANNEL_TO`          | recipient (`<node>` or `all`)          |
+| `CHANNEL_TYPE`        | `directive` / `response` / …           |
+| `CHANNEL_CREATED`     | UTC timestamp                          |
+| `CHANNEL_THREAD`      | thread id (may be empty)               |
+| `CHANNEL_IN_REPLY_TO` | id this replies to (may be empty)      |
+| `CHANNEL_BODY`        | the message text                       |
+
+> **Tip:** point `--exec` at a *script*, not an inline shell one-liner. The inline form
+> uses the host shell's variable syntax (`%CHANNEL_ID%` under Windows `cmd`,
+> `$CHANNEL_ID` under `sh`); a script reads the env vars directly and stays
+> cross-platform. A typical handler: if `CHANNEL_TYPE == directive`, hand `CHANNEL_BODY`
+> to the local agent as a task, then `channel send --to $CHANNEL_FROM --type response
+> --in-reply-to $CHANNEL_ID "<result>"`.
+
+### Running it unattended at boot
+
+`channel watch` is a long-running foreground process; keep it alive with whatever your
+PC already uses:
+
+- **Windows:** a Scheduled Task ("At log on", *Restart if it stops*), or NSSM to run it
+  as a service.
+- **Linux:** a `systemd --user` service with `Restart=always`.
+- **macOS:** a `launchd` LaunchAgent with `KeepAlive`.
+
+Because the medium is just Git, you also get a permanent, greppable transcript of every
 inter-PC exchange in `messages/`.
 
 ## Layout
