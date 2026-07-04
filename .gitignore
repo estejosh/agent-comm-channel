@@ -1,0 +1,14 @@
+# Per-node local state — never shared. Each PC tracks which message ids it has
+# already processed here. Keeping it out of git is what makes "seen" per-node.
+.state/
+.node
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+__pycache__/
+*.pyc
+
+# Rust build output (Cargo.lock IS committed — binary crate, reproducible builds)
+/target

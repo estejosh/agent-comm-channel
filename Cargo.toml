@@ -1,0 +1,20 @@
+[package]
+name = "channel"
+version = "0.1.0"
+edition = "2021"
+description = "A Git repository used as an asynchronous message bus for inter-PC agent chat"
+license = "LicenseRef-PolyForm-Noncommercial-1.0.0"
+repository = "https://github.com/estejosh/agent-comm-channel"
+readme = "README.md"
+
+[[bin]]
+name = "channel"
+path = "src/main.rs"
+
+[dependencies]
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"
