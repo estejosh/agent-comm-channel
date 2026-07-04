@@ -14,6 +14,20 @@ path = "src/main.rs"
 [dependencies]
 uuid = { version = "1", features = ["v4"] }
 
+# --- secrets manager ---
+# Git-tier encryption (asymmetric, per-PC recipients)
+age = { version = "0.11", features = ["armor"] }
+# Vault-tier: passphrase KDF + AEAD + TOTP 2FA
+argon2 = "0.5"
+chacha20poly1305 = "0.10"
+rand = "0.8"
+sha2 = "0.10"
+sha1 = "0.10"
+hmac = "0.12"
+zeroize = "1"
+rpassword = "7"       # read passphrase without echo
+data-encoding = "2"   # base32 for TOTP secret, hex/base64 helpers
+
 [profile.release]
 strip = true
 lto = true

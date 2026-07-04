@@ -14,6 +14,8 @@
 //! `PROTOCOL.md` is the canonical spec. This binary is the reference client; any
 //! language that can write a file and shell out to `git` can interoperate.
 
+mod secrets;
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -136,6 +138,11 @@ fn node_id(root: &Path, cli: &Option<String>) -> String {
             exit(1);
         }
     }
+}
+
+/// Like `node_id` but returns None instead of exiting when `.node` is absent.
+fn node_id_opt(root: &Path) -> Option<String> {
+    fs::read_to_string(node_file(root)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 // --------------------------------------------------------------------- message
@@ -416,6 +423,8 @@ fn usage() -> ! {
          \x20 channel watch [--interval <secs>] [--exec <cmd>] [--node <name>]\n\
          \x20 channel log   [--limit <n>]\n\
          \x20 channel whoami\n\
+         \x20 channel secret enroll --node <id> | set <name> [val] | get <name> | list   (git tier, agent-usable)\n\
+         \x20 channel vault init | set <name> [val] | get <name> | list | unlock [--minutes N] | lock   (local 2FA vault)\n\
          \n\
          The node id is read from .node (set by `init`) unless --node is given.\n\
          See PROTOCOL.md for the on-disk wire format."
@@ -481,6 +490,76 @@ fn main() {
         }
         "whoami" => {
             println!("{}", node_id(&root, &node_cli));
+        }
+        "vault" => {
+            let sub = rest.first().map(|s| s.as_str()).unwrap_or("");
+            let rest2 = if rest.is_empty() { &[][..] } else { &rest[1..] };
+            match sub {
+                "init" => secrets::vault_init(),
+                "set" => {
+                    let name = positional(rest2, &[]).unwrap_or_else(|| {
+                        eprintln!("vault set requires <name>");
+                        exit(2);
+                    });
+                    // value: an explicit second positional, else read from stdin
+                    let value = rest2.iter().filter(|a| !a.starts_with("--")).nth(1).cloned();
+                    secrets::vault_set(&name, value);
+                }
+                "get" => {
+                    let name = positional(rest2, &[]).unwrap_or_else(|| {
+                        eprintln!("vault get requires <name>");
+                        exit(2);
+                    });
+                    secrets::vault_get(&name);
+                }
+                "list" => secrets::vault_list(),
+                "unlock" => {
+                    let mins = opt(rest2, "--minutes").and_then(|s| s.parse().ok()).unwrap_or(15);
+                    secrets::vault_unlock(mins);
+                }
+                "lock" => secrets::vault_lock(),
+                _ => {
+                    eprintln!(
+                        "vault subcommands: init | set <name> [value] | get <name> | list | unlock [--minutes N] | lock"
+                    );
+                    exit(2);
+                }
+            }
+        }
+        "secret" => {
+            let sub = rest.first().map(|s| s.as_str()).unwrap_or("");
+            let rest2 = if rest.is_empty() { &[][..] } else { &rest[1..] };
+            match sub {
+                "enroll" => {
+                    let n = opt(rest2, "--node")
+                        .or_else(|| node_id_opt(&root))
+                        .unwrap_or_else(|| {
+                            eprintln!("secret enroll requires --node <id> (or run `channel init` first)");
+                            exit(2);
+                        });
+                    secrets::secret_enroll(&n);
+                }
+                "set" => {
+                    let name = positional(rest2, &[]).unwrap_or_else(|| {
+                        eprintln!("secret set requires <name>");
+                        exit(2);
+                    });
+                    let value = rest2.iter().filter(|a| !a.starts_with("--")).nth(1).cloned();
+                    secrets::secret_set(&name, value);
+                }
+                "get" => {
+                    let name = positional(rest2, &[]).unwrap_or_else(|| {
+                        eprintln!("secret get requires <name>");
+                        exit(2);
+                    });
+                    secrets::secret_get(&name);
+                }
+                "list" => secrets::secret_list(),
+                _ => {
+                    eprintln!("secret subcommands: enroll --node <id> | set <name> [value] | get <name> | list");
+                    exit(2);
+                }
+            }
         }
         "-h" | "--help" | "help" => usage(),
         other => {
