@@ -53,19 +53,54 @@ pub fn vault_dir() -> PathBuf {
     }
 }
 
-fn meta_path(dir: &Path) -> PathBuf { dir.join("vault.meta") }
-fn lease_path(dir: &Path) -> PathBuf { dir.join(".lease") }
-fn secret_dir(dir: &Path, name: &str) -> PathBuf { dir.join("secrets").join(slug(name)) }
+fn meta_path(dir: &Path) -> PathBuf {
+    dir.join("vault.meta")
+}
+fn lease_path(dir: &Path) -> PathBuf {
+    dir.join(".lease")
+}
+fn secret_dir(dir: &Path, name: &str) -> PathBuf {
+    dir.join("secrets").join(slug(name))
+}
 
 fn slug(s: &str) -> String {
-    let out: String = s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '-' })
+    let out: String = s
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
-    if out.is_empty() { "unnamed".into() } else { out }
+    if out.is_empty() {
+        "unnamed".into()
+    } else {
+        out
+    }
 }
 
 fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+fn subsec_nanos() -> u32 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0)
+}
+
+/// Version filenames must be unique per second: `vault set` twice in the same
+/// second used to collide on one filename and silently drop a version. The
+/// zero-padded nanos suffix keeps every version the same width, so the
+/// lexicographically-last file is still the latest one.
+fn version_file_name() -> String {
+    format!("{}.{:09}", iso_stamp(), subsec_nanos())
 }
 
 fn iso_stamp() -> String {
@@ -122,8 +157,10 @@ fn open(key: &[u8; 32], blob: &[u8]) -> Option<Vec<u8>> {
 
 // ------------------------------------------------------------------------ TOTP
 /// RFC 6238 TOTP, 6 digits, 30-second step, SHA-1 (Google Authenticator default).
-fn totp_now(secret: &[u8], skew_step: i64) -> String {
-    let counter = ((now_secs() as i64 / 30) + skew_step) as u64;
+/// Takes the clock as a parameter so the RFC test vectors are unit-testable;
+/// `totp_now` is the wall-clock wrapper.
+fn totp_at(secret: &[u8], unix_secs: u64, skew_step: i64) -> String {
+    let counter = ((unix_secs as i64 / 30) + skew_step) as u64;
     let mut mac = <HmacSha1 as Mac>::new_from_slice(secret).expect("hmac key");
     mac.update(&counter.to_be_bytes());
     let hs = mac.finalize().into_bytes();
@@ -133,6 +170,10 @@ fn totp_now(secret: &[u8], skew_step: i64) -> String {
         | ((hs[offset + 2] as u32) << 8)
         | (hs[offset + 3] as u32);
     format!("{:06}", bin % 1_000_000)
+}
+
+fn totp_now(secret: &[u8], skew_step: i64) -> String {
+    totp_at(secret, now_secs(), skew_step)
 }
 
 /// Accept a code if it matches the current step or the immediately adjacent
@@ -262,9 +303,15 @@ fn write_lease(dir: &Path, key: &[u8; 32], ttl_secs: u64) {
 }
 
 fn lease_active(dir: &Path, key: &[u8; 32]) -> bool {
-    let Ok(raw) = fs::read(lease_path(dir)) else { return false };
-    let Some(plain) = open(key, &raw) else { return false };
-    let Ok(expiry) = String::from_utf8_lossy(&plain).parse::<u64>() else { return false };
+    let Ok(raw) = fs::read(lease_path(dir)) else {
+        return false;
+    };
+    let Some(plain) = open(key, &raw) else {
+        return false;
+    };
+    let Ok(expiry) = String::from_utf8_lossy(&plain).parse::<u64>() else {
+        return false;
+    };
     expiry > now_secs()
 }
 
@@ -280,7 +327,10 @@ fn verify_second_factor(dir: &Path, salt: &[u8; 16], key: &[u8; 32], mut meta: V
     if let Some(pos) = meta.backup_hashes.iter().position(|x| *x == h) {
         meta.backup_hashes.remove(pos);
         write_meta(dir, salt, key, &meta);
-        eprintln!("(backup code accepted and consumed; {} left)", meta.backup_hashes.len());
+        eprintln!(
+            "(backup code accepted and consumed; {} left)",
+            meta.backup_hashes.len()
+        );
         return true;
     }
     false
@@ -342,14 +392,17 @@ pub fn vault_init() {
         rand::thread_rng().fill_bytes(&mut b);
         let code = format!(
             "{}-{}",
-            &BASE32_NOPAD.encode(&b[..3])[..4].to_lowercase(),
-            &BASE32_NOPAD.encode(&b[2..])[..4].to_lowercase()
+            BASE32_NOPAD.encode(&b[..3])[..4].to_lowercase(),
+            BASE32_NOPAD.encode(&b[2..])[..4].to_lowercase()
         );
         backup_hashes.push(sha256_hex(&code));
         plaintext_codes.push(code);
     }
 
-    let meta = VaultMeta { totp_secret: totp_secret.clone(), backup_hashes };
+    let meta = VaultMeta {
+        totp_secret: totp_secret.clone(),
+        backup_hashes,
+    };
     write_meta(&dir, &salt, &key, &meta);
     let _ = fs::create_dir_all(dir.join("secrets"));
 
@@ -367,7 +420,9 @@ pub fn vault_init() {
 
 pub fn vault_set(name: &str, value: Option<String>) {
     let dir = vault_dir();
-    let Some(key) = unlock(&dir, /*allow_lease=*/ true) else { std::process::exit(1) };
+    let Some(key) = unlock(&dir, /*allow_lease=*/ true) else {
+        std::process::exit(1)
+    };
     let value = value.unwrap_or_else(|| {
         use std::io::Read;
         let mut s = String::new();
@@ -378,17 +433,23 @@ pub fn vault_set(name: &str, value: Option<String>) {
     let sdir = secret_dir(&dir, name);
     let _ = fs::create_dir_all(&sdir);
     let blob = seal(&key, value.as_bytes());
-    let file = sdir.join(format!("{}.bin", iso_stamp()));
+    let file = sdir.join(format!("{}.bin", version_file_name()));
     if fs::write(&file, blob).is_err() {
         eprintln!("failed to write secret version");
         std::process::exit(1);
     }
-    println!("stored '{}' (version {})", slug(name), file.file_name().unwrap().to_string_lossy());
+    println!(
+        "stored '{}' (version {})",
+        slug(name),
+        file.file_name().unwrap().to_string_lossy()
+    );
 }
 
 pub fn vault_get(name: &str) {
     let dir = vault_dir();
-    let Some(key) = unlock(&dir, true) else { std::process::exit(1) };
+    let Some(key) = unlock(&dir, true) else {
+        std::process::exit(1)
+    };
     let sdir = secret_dir(&dir, name);
     // Latest version = lexicographically-last timestamped file.
     let latest = fs::read_dir(&sdir).ok().and_then(|rd| {
@@ -416,7 +477,9 @@ pub fn vault_list() {
     let dir = vault_dir();
     // Listing names does not reveal values; still require the gate so mere
     // presence of the vault contents is not leaked to an unattended agent.
-    let Some(_key) = unlock(&dir, true) else { std::process::exit(1) };
+    let Some(_key) = unlock(&dir, true) else {
+        std::process::exit(1)
+    };
     let sroot = dir.join("secrets");
     let Ok(rd) = fs::read_dir(&sroot) else {
         println!("(vault empty)");
@@ -426,7 +489,11 @@ pub fn vault_list() {
     for e in rd.filter_map(|e| e.ok()) {
         if e.path().is_dir() {
             let versions = fs::read_dir(e.path()).map(|r| r.count()).unwrap_or(0);
-            println!("{}  ({versions} version{})", e.file_name().to_string_lossy(), if versions == 1 { "" } else { "s" });
+            println!(
+                "{}  ({versions} version{})",
+                e.file_name().to_string_lossy(),
+                if versions == 1 { "" } else { "s" }
+            );
             any = true;
         }
     }
@@ -438,7 +505,9 @@ pub fn vault_list() {
 pub fn vault_unlock(ttl_mins: u64) {
     let dir = vault_dir();
     // Force full 2FA (no lease shortcut) to START a lease.
-    let Some(key) = unlock(&dir, /*allow_lease=*/ false) else { std::process::exit(1) };
+    let Some(key) = unlock(&dir, /*allow_lease=*/ false) else {
+        std::process::exit(1)
+    };
     write_lease(&dir, &key, ttl_mins * 60);
     println!("vault unlocked for {ttl_mins} min — agent may read the vault hands-off until then");
 }
@@ -470,42 +539,97 @@ fn git_root() -> PathBuf {
     std::env::current_dir().expect("cwd")
 }
 
-fn identity_path(root: &Path) -> PathBuf { root.join(".identity") }
-fn keys_path(root: &Path) -> PathBuf { root.join("keys.txt") }
+fn identity_path(root: &Path) -> PathBuf {
+    root.join(".identity")
+}
+fn keys_path(root: &Path) -> PathBuf {
+    root.join("keys.txt")
+}
 fn git_secret_path(root: &Path, name: &str) -> PathBuf {
     root.join("secrets").join(format!("{}.age", slug(name)))
 }
 
-/// Create this PC's age keypair if absent and append its public recipient to
-/// keys.txt under the given node id.
+/// Create this PC's age keypair if absent, then make sure keys.txt maps the
+/// node id to THIS PC's current public key. The keys.txt entry is derived from
+/// the local `.identity` (the authoritative private half), so a re-enroll after
+/// a lost/regenerated identity repairs a stale line instead of leaving other
+/// PCs encrypting to a key this one can no longer open.
 pub fn secret_enroll(node: &str) {
     let root = git_root();
     let id_path = identity_path(&root);
-    if id_path.exists() {
-        eprintln!("this PC already has an identity at {}", id_path.display());
-    } else {
+    if !id_path.exists() {
         let id = age::x25519::Identity::generate();
-        let pubkey = id.to_public();
         let secret = id.to_string(); // "AGE-SECRET-KEY-1..."
-        // Store the private identity locally, gitignored.
+                                     // Store the private identity locally, gitignored.
         use age::secrecy::ExposeSecret;
         if fs::write(&id_path, format!("{}\n", secret.expose_secret())).is_err() {
             eprintln!("failed to write .identity");
             std::process::exit(1);
         }
         println!("generated identity -> {} (gitignored)", id_path.display());
-
-        // Append our public recipient to keys.txt (idempotent on node id).
-        let line = format!("{} {}\n", slug(node), pubkey);
-        let existing = fs::read_to_string(keys_path(&root)).unwrap_or_default();
-        if existing.lines().any(|l| l.split_whitespace().next() == Some(&slug(node))) {
-            eprintln!("node '{}' already in keys.txt — leaving it", slug(node));
-        } else {
-            let _ = fs::write(keys_path(&root), format!("{existing}{line}"));
-            println!("added '{}' to keys.txt", slug(node));
-        }
-        println!("commit keys.txt and push so other PCs can encrypt to this one.");
+    } else {
+        eprintln!("this PC already has an identity at {}", id_path.display());
     }
+
+    // Recover the identity (freshly created or pre-existing) and upsert its
+    // public key under this node id.
+    let id_text = fs::read_to_string(&id_path).unwrap_or_else(|_| {
+        eprintln!("failed to read {}", id_path.display());
+        std::process::exit(1);
+    });
+    let identity: age::x25519::Identity = id_text
+        .lines()
+        .find(|l| l.starts_with("AGE-SECRET-KEY-"))
+        .unwrap_or("")
+        .parse()
+        .unwrap_or_else(|_| {
+            eprintln!("malformed .identity — delete it and re-run `channel secret enroll`");
+            std::process::exit(1);
+        });
+    let pubkey = identity.to_public().to_string();
+    let node = slug(node);
+
+    let existing = fs::read_to_string(keys_path(&root)).unwrap_or_default();
+    let mut changed = false;
+    let mut lines: Vec<String> = Vec::new();
+    for line in existing.lines() {
+        if line.split_whitespace().next() == Some(node.as_str()) {
+            match line.split_whitespace().nth(1) {
+                Some(key) if key == pubkey => lines.push(line.to_string()),
+                _ => {
+                    eprintln!(
+                        "keys.txt had a different key for '{node}' — replacing with this PC's"
+                    );
+                    lines.push(format!("{node} {pubkey}"));
+                    changed = true;
+                }
+            }
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+    if !existing
+        .lines()
+        .any(|l| l.split_whitespace().next() == Some(node.as_str()))
+    {
+        lines.push(format!("{node} {pubkey}"));
+        changed = true;
+    }
+    if changed {
+        let mut out = String::new();
+        for l in &lines {
+            out.push_str(l);
+            out.push('\n');
+        }
+        if fs::write(keys_path(&root), out).is_err() {
+            eprintln!("failed to write keys.txt");
+            std::process::exit(1);
+        }
+        println!("added/updated '{node}' in keys.txt");
+    } else {
+        println!("'{}' already in keys.txt — leaving it", node);
+    }
+    println!("commit keys.txt and push so other PCs can encrypt to this one.");
 }
 
 fn load_recipients(root: &Path) -> Vec<age::x25519::Recipient> {
@@ -543,18 +667,18 @@ pub fn secret_set(name: &str, value: Option<String>) {
         s.trim_end().to_string()
     });
 
-    let recips: Vec<&dyn age::Recipient> =
-        recipients.iter().map(|r| r as &dyn age::Recipient).collect();
-    let encryptor = age::Encryptor::with_recipients(recips.into_iter())
-        .expect("at least one recipient");
+    let recips: Vec<&dyn age::Recipient> = recipients
+        .iter()
+        .map(|r| r as &dyn age::Recipient)
+        .collect();
+    let encryptor =
+        age::Encryptor::with_recipients(recips.into_iter()).expect("at least one recipient");
 
     let mut armored = vec![];
     {
-        let armor_writer = age::armor::ArmoredWriter::wrap_output(
-            &mut armored,
-            age::armor::Format::AsciiArmor,
-        )
-        .expect("armor writer");
+        let armor_writer =
+            age::armor::ArmoredWriter::wrap_output(&mut armored, age::armor::Format::AsciiArmor)
+                .expect("armor writer");
         let mut w = encryptor.wrap_output(armor_writer).expect("wrap output");
         w.write_all(value.as_bytes()).expect("write plaintext");
         let armor_writer = w.finish().expect("finish stream");
@@ -609,7 +733,10 @@ pub fn secret_get(name: &str) {
     let mut reader = match decryptor.decrypt(std::iter::once(&identity as &dyn age::Identity)) {
         Ok(r) => r,
         Err(_) => {
-            eprintln!("this PC's key cannot decrypt '{}' (not a recipient?)", slug(name));
+            eprintln!(
+                "this PC's key cannot decrypt '{}' (not a recipient?)",
+                slug(name)
+            );
             std::process::exit(1);
         }
     };
@@ -644,3 +771,105 @@ pub fn secret_list() {
     }
 }
 
+// ------------------------------------------------------------------------
+//  Tests — pure logic only; nothing here touches a real vault directory.
+// ------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- AEAD core ---------------------------------------------------------
+    #[test]
+    fn seal_open_roundtrip() {
+        let key = [7u8; 32];
+        let blob = seal(&key, b"attack at dawn");
+        assert_eq!(
+            open(&key, &blob).as_deref(),
+            Some(b"attack at dawn".as_slice())
+        );
+    }
+
+    #[test]
+    fn open_rejects_tampered_and_short_blobs() {
+        let key = [9u8; 32];
+        let mut blob = seal(&key, b"secret");
+        let last = blob.len() - 1;
+        blob[last] ^= 0x01;
+        assert_eq!(open(&key, &blob), None);
+        assert_eq!(open(&key, &blob[..10]), None);
+    }
+
+    #[test]
+    fn fresh_nonce_changes_ciphertext() {
+        let key = [3u8; 32];
+        assert_ne!(seal(&key, b"x"), seal(&key, b"x"));
+    }
+
+    // --- TOTP: RFC 6238 SHA-1 test vectors (6-digit truncation) ------------
+    #[test]
+    fn totp_matches_rfc6238_vectors() {
+        let secret = b"12345678901234567890";
+        // (unix time, expected 6-digit code)
+        let cases = [
+            (59u64, "287082"),
+            (1_111_111_109, "081804"),
+            (1_111_111_111, "050471"),
+            (1_234_567_890, "005924"),
+            (2_000_000_000, "279037"),
+            (20_000_000_000, "353130"),
+        ];
+        for (t, want) in cases {
+            assert_eq!(totp_at(secret, t, 0), want, "vector at t={t}");
+        }
+    }
+
+    #[test]
+    fn totp_skew_steps_shift_window() {
+        let secret = b"12345678901234567890";
+        let t = 59u64;
+        assert_eq!(totp_at(secret, t + 30, -1), totp_at(secret, t, 0));
+        assert_ne!(totp_at(secret, t + 30, 0), totp_at(secret, t, 0));
+    }
+
+    // --- metadata codec -----------------------------------------------------
+    #[test]
+    fn meta_json_roundtrip() {
+        let m = VaultMeta {
+            totp_secret: vec![1, 2, 3, 4],
+            backup_hashes: vec!["aa".into(), "bb".into()],
+        };
+        let parsed = parse_meta_json(&meta_to_json(&m));
+        assert_eq!(parsed.totp_secret, m.totp_secret);
+        assert_eq!(parsed.backup_hashes, m.backup_hashes);
+    }
+
+    #[test]
+    fn parse_meta_json_tolerates_unknown_lines() {
+        let want = vec![9u8, 8, 7];
+        let b32 = BASE32_NOPAD.encode(&want); // NOPAD: no '=' padding allowed
+        let m = parse_meta_json(&format!("noise\nnotbackup: x\ntotp: {b32}\n"));
+        assert_eq!(m.totp_secret, want);
+        assert!(m.backup_hashes.is_empty());
+    }
+
+    #[test]
+    fn sha256_known_vector() {
+        assert_eq!(
+            sha256_hex("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    // --- version filenames --------------------------------------------------
+    #[test]
+    fn version_names_are_fixed_width_and_sortable() {
+        let a = version_file_name();
+        let b = version_file_name();
+        assert_eq!(a.len(), b.len(), "all version stamps must be same width");
+        // "<ISO stamp with dashes>.<9-digit nanos>" — the fixed-width numeric
+        // suffix keeps lexicographic order equal to chronological order.
+        let dot = a.len() - 10;
+        assert_eq!(&a[dot..dot + 1], ".");
+        assert!(a[dot + 1..].bytes().all(|c| c.is_ascii_digit()));
+    }
+}

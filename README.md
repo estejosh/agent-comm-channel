@@ -72,12 +72,14 @@ channel watch --interval 30
 # auto-pull AND trigger a handler per new message (no human in the loop)
 channel watch --interval 30 --exec "python handle_message.py"
 
-# see recent traffic from everyone
+# see recent traffic from everyone (pulls first, consumes nothing)
 channel log --limit 20
 ```
 
 `--type` is one of `directive`, `response`, `status`, `ack`, `note`. The node id
-comes from `.node` unless you pass `--node`.
+comes from `.node` unless you pass `--node`. Omit the body argument and `send`
+reads it from stdin, so you can pipe multi-line text: `echo "long body" |
+channel send --to pc-beta`.
 
 ### Message shape
 
@@ -107,6 +109,11 @@ channel watch --interval 30 --exec "python handle_message.py"
 
 For every **new** message, the hook command runs once with the message exposed as
 environment variables — so your handler needs no argument parsing:
+
+> **Delivery guarantee:** with `--exec` a message is retried until its hook exits
+> 0, so a crash or a failing handler never silently drops mail. That makes
+> delivery *at-least-once*: handlers must tolerate seeing the same id twice.
+> See `PROTOCOL.md §8` for the full failure-mode story.
 
 | env var               | value                                  |
 |-----------------------|----------------------------------------|

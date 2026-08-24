@@ -30,6 +30,12 @@ with a short backoff.
 Corollary: correcting or retracting a message is done by sending a *new* message
 (e.g. `type: note` referencing the old id via `in_reply_to`), never by editing.
 
+**Duplicate ids.** Ids are 8 random hex chars, so collisions are negligible but
+MUST be tolerated: if two distinct files ever carry the same `id`, receivers
+process the first they encounter and ignore the rest (first-seen wins). A file
+that is an exact byte-for-byte duplicate causes no conflict at all — Git treats
+it as the same blob, and `git add` simply has nothing new to commit.
+
 ## 3. Node identity
 
 Each PC is a **node** with a lowercase-kebab id (e.g. `pc-alpha`, `workshop-rig`).
@@ -87,6 +93,11 @@ The parser is intentionally forgiving: split on the first two `---`, read
 frontmatter keys MUST be ignored, not rejected — this is how the format stays
 forward-compatible.
 
+Bodies are UTF-8 text. A file with no frontmatter at all is not an error: treat
+the whole file as the body and all fields as empty (this keeps a stray or
+hand-written file from wedging a receiver). As a courtesy convention, keep
+bodies under ~64 KiB — the bus is for directions and responses, not payloads.
+
 ### 4.3 Message types
 
 - `directive` — "do this" (an instruction expecting action).
@@ -107,7 +118,7 @@ Receive algorithm:
 
 ```
 git pull --rebase --autostash
-for each file in messages/*.md, sorted by `created`:
+for each file in messages/*.md, sorted by `created` (ties broken by filename):
     parse it
     if id not in my seen-set
        and from != me
@@ -116,6 +127,10 @@ for each file in messages/*.md, sorted by `created`:
         add id to my seen-set
 persist seen-set
 ```
+
+The filename tie-break matters: `created` comes from each sender's clock, so two
+messages can share a timestamp, and `read_dir` order is arbitrary. Sorting by
+(`created`, filename) gives every node the same total order.
 
 ## 6. Minimal interop example (no reference client)
 
@@ -150,4 +165,39 @@ repository (see the companion `pc-agent-bridge`). Anyone with push access to the
 repo can send messages as any node id — there is no authentication in the transport
 itself. If you need sender authenticity, sign message bodies (e.g. Ed25519) and
 verify on receipt; the frontmatter is designed to carry a `sig` field if you add
-one (unknown keys are ignored by conformant parsers).
+one (unknown keys are ignored by conformant parsers). The recommended convention:
+`sig` is the signature over the exact UTF-8 body bytes, with the signer's node id
+in `from` — frontmatter is left unsigned so a message can be relayed unchanged.
+
+## 8. Ordering, delivery semantics, and failure modes
+
+### 8.1 Ordering is advisory
+
+There is no global order. `created` uses each sender's wall clock, which can be
+wrong or skewed; filenames inherit that skew. Consumers sort messages into a
+stable order (§5), but protocols built on top of this bus MUST NOT rely on
+cross-node ordering — use `thread`, `in_reply_to`, and explicit state in message
+bodies instead.
+
+### 8.2 Delivery semantics
+
+- Plain `recv` is **at-most-once** per node: a message is marked seen the moment
+  it is printed.
+- `watch --exec` is **at-least-once**: a message stays unseen until its hook
+  exits 0, so crashes and failing handlers retry on later ticks. Handlers MUST
+  therefore tolerate seeing the same message id more than once (be idempotent).
+  Losing the seen-set has the same effect: redelivery, not data loss.
+
+### 8.3 Failure modes and recovery
+
+| failure                              | what happens                                   | recovery                                              |
+|--------------------------------------|------------------------------------------------|-------------------------------------------------------|
+| crash between commit and push        | local commit exists, origin does not           | nothing to do — the next send/push carries it along    |
+| two peers push concurrently          | loser's push rejected (non-fast-forward)       | `git pull --rebase` + re-push; clients SHOULD auto-retry with backoff |
+| push fails repeatedly (offline)      | message sits in local commits                  | retried on next send tick; Git queues it durably       |
+| receiver sees malformed file         | parser treats it as body-only/empty fields     | skip it; never let one bad file wedge the receive loop |
+| duplicate message id                 | second file ignored (first-seen wins)          | none needed                                            |
+| seen-set lost/deleted                | all history looks "new" again                  | redelivery only; handlers should be idempotent (§8.2)  |
+
+A crashed `send` never corrupts anything: at worst it leaves an unpushed local
+commit or an uncommitted file, both of which are picked up by the next attempt.
