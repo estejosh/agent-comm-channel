@@ -1,131 +1,109 @@
-# PolyForm Noncommercial License 1.0.0
+The Usufruct License (UFL) — Version 2.0
+Canonical text, whitepaper, and FAQ: https://github.com/estejosh/UFL-Usufruct-License
 
-<https://polyformproject.org/licenses/noncommercial/1.0.0>
+Copyright (c) 2026 Joshua D. Hale
 
-## Acceptance
+Operational Scope: Noncommercial
 
-In order to get any license under these terms, you must agree
-to them as both strict obligations and conditions to all
-your licenses.
+## 1. Grant of Use
 
-## Copyright License
+Subject to the terms below and the Operational Scope declared above,
+the Licensor grants anyone the free, perpetual, worldwide right to use
+the Software — in source or compiled form, at any scale — without
+payment or a separate license beyond what Section 1A requires. This
+includes running the Software, deploying it, integrating with it
+through its published interfaces, and operating a product or service
+built on top of it, as scoped by Section 1A.
 
-The licensor grants you a copyright license for the
-software to do everything you might do with the software
-that would otherwise infringe the licensor's copyright
-in it for any permitted purpose.  However, you may
-only distribute the software according to [Distribution
-License](#distribution-license) and make changes or new works
-based on the software according to [Changes and New Works
-License](#changes-and-new-works-license).
+## 1A. Operational Scope
 
-## Distribution License
+The Operational Scope declared above states the only limit, if any, on
+Section 1's grant. Exactly one scope applies to this Software:
 
-The licensor grants you an additional copyright license
-to distribute copies of the software.  Your license
-to distribute covers distributing the software with
-changes and new works permitted by [Changes and New Works
-License](#changes-and-new-works-license).
+Noncommercial — Section 1's grant is limited to non-commercial use.
+Commercial use of the Software requires a separate written license
+from the Licensor.
 
-## Notices
+## 2. Reserved Rights
 
-You must ensure that anyone who gets a copy of any part of
-the software from you also gets a copy of these terms or the
-URL for them above, as well as copies of any plain-text lines
-beginning with `Required Notice:` that the licensor provided
-with the software.  For example:
+The following rights are reserved to the Licensor and are NOT granted by
+Section 1. They require a separate written license from the Licensor,
+except as Section 2A permits:
 
-> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+  (a) Distributing the Software, or any modified version, fork, or
+      substantially similar reimplementation of it, to any third party,
+      in source or compiled form.
+  (b) Incorporating the Software's source code into another product or
+      service that is distributed, sold, or otherwise made available to
+      third parties.
+  (c) Using the Licensor's name, marks, or claims of compatibility
+      ("Agent Comm Channel-compatible," "built on Agent Comm Channel," etc.) in
+      connection with a distributed derivative.
 
-## Changes and New Works License
+## 2A. Forks of Decentralized or Network Software
 
-The licensor grants you an additional copyright license to
-make changes and new works based on the software for any
-permitted purpose.
+If the Software is designed to run as a node, client, or peer in a
+decentralized network, blockchain, or similar peer-to-peer protocol,
+Section 2(a) does not require a separate license for distributing a
+modified version, fork, or independent reimplementation of it —
+including to operate a competing network — provided the distributed
+work:
 
-## Patent License
+  (i) prominently and accurately credits Agent Comm Channel as the origin
+      of the Software or protocol, in its README, whitepaper, or
+      equivalent primary documentation; and
+  (ii) keeps the canonical-source notice required by Section 7 intact.
 
-The licensor grants you a patent license for the software that
-covers patent claims the licensor can license, or becomes able
-to license, that you would infringe by using the software.
+Distributing a fork that removes, obscures, or falsifies this
+attribution is not permitted under this exception and still requires a
+separate license under Section 2(a). This section does not affect
+Sections 2(b) or 2(c): incorporating the Software into another
+distributed product, and using the Licensor's name or marks to claim
+compatibility, still require a separate license regardless of
+attribution.
 
-## Noncommercial Purposes
+## 3. Why "Usufruct"
 
-Any noncommercial purpose is a permitted purpose.
+In civil law, a usufruct is the right to use property belonging to
+another and enjoy its benefits, without the right to alter its substance
+or transfer ownership to someone else. This license grants exactly that:
+full use, no transfer.
 
-## Personal Uses
+## 4. Contributions
 
-Personal use for research, experiment, and testing for
-the benefit of public knowledge, personal study, private
-entertainment, hobby projects, amateur pursuits, or religious
-observance, without any anticipated commercial application,
-is use for a permitted purpose.
+Contributions submitted to a Software repository under this license are
+accepted under these same terms and are granted back to the Licensor to
+the extent necessary to keep this license enforceable across the
+combined work.
 
-## Noncommercial Organizations
+## 5. No Warranty
 
-Use by any charitable organization, educational institution,
-public research organization, public safety or health
-organization, environmental protection organization,
-or government institution is use for a permitted purpose
-regardless of the source of funding or obligations resulting
-from the funding.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY ARISING FROM THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE.
 
-## Fair Use
+## 6. Note on Classification
 
-You may have "fair use" rights for the software under the
-law. These terms do not limit them.
+This is a source-available license, not an OSI-approved open source
+license. The Open Source Definition requires unrestricted redistribution
+rights, which Section 2 intentionally withholds regardless of
+Operational Scope. Some Operational Scopes under Section 1A also
+withhold uses the Open Source Definition requires to be unrestricted.
+The source is public; which uses are free depends on the Operational
+Scope declared above.
 
-## No Other Rights
+## 7. Notice
 
-These terms do not allow you to sublicense or transfer any of
-your licenses to anyone else, or prevent the licensor from
-granting licenses to anyone else.  These terms do not imply
-any other licenses.
+The canonical-source line at the top of this license text (or an
+equivalent pointer to https://github.com/estejosh/UFL-Usufruct-License)
+must be kept intact when this license text is copied into another
+project. This is a notice requirement on the license text itself, not
+an additional condition on using the Software beyond Section 1A.
 
-## Patent Defense
-
-If you make any written claim that the software infringes or
-contributes to infringement of any patent, your patent license
-for the software granted under these terms ends immediately. If
-your company makes such a claim, your patent license ends
-immediately for work on behalf of your company.
-
-## Violations
-
-The first time you are notified in writing that you have
-violated any of these terms, or done anything with the software
-not covered by your licenses, your licenses can nonetheless
-continue if you come into full compliance with these terms,
-and take practical steps to correct past violations, within
-32 days of receiving notice.  Otherwise, all your licenses
-end immediately.
-
-## No Liability
-
-***As far as the law allows, the software comes as is, without
-any warranty or condition, and the licensor will not be liable
-to you for any damages arising out of these terms or the use
-or nature of the software, under any kind of legal claim.***
-
-## Definitions
-
-The **licensor** is the individual or entity offering these
-terms, and the **software** is the software the licensor makes
-available under these terms.
-
-**You** refers to the individual or entity agreeing to these
-terms.
-
-**Your company** is any legal entity, sole proprietorship,
-or other kind of organization that you work for, plus all
-organizations that have control over, are under the control of,
-or are under common control with that organization.  **Control**
-means ownership of substantially all the assets of an entity,
-or the power to direct its management and policies by vote,
-contract, or otherwise.  Control can be direct or indirect.
-
-**Your licenses** are all the licenses granted to you for the
-software under these terms.
-
-**Use** means anything you do with the software requiring one
-of your licenses.
+---
+SPDX identifier: UFL is not on the official SPDX license list. Per SPDX
+convention for licenses outside that list, use `LicenseRef-UFL-2.0-N` —
+not a bare `UFL-2.0-N`, which would misrepresent it as SPDX-registered.
