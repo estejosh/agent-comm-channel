@@ -1,4 +1,4 @@
-The Usufruct License (UFL) — Version 2.0
+The Usufruct License (UFL) — Version 2.1
 Canonical text, whitepaper, and FAQ: https://github.com/estejosh/UFL-Usufruct-License
 
 Copyright (c) 2026 Joshua D. Hale
@@ -62,6 +62,19 @@ distributed product, and using the Licensor's name or marks to claim
 compatibility, still require a separate license regardless of
 attribution.
 
+## 2B. Reproducing This License Text
+
+The text of this license — this document itself, independent of any
+particular copy's Operational Scope, copyright holder, or project name —
+may be freely copied, reproduced, and adapted by anyone to license their own
+software, including verbatim reproduction in a project's own LICENSE file.
+This permission is not limited by Section 2(a) and applies regardless of
+Operational Scope: licensing your own software under this text is not
+"distributing the Software" of any other project that also uses it, and
+requires no separate permission from any Licensor who has used it. This
+section grants no right to any particular Licensor's Software — only to the
+legal text of this license itself.
+
 ## 3. Why "Usufruct"
 
 In civil law, a usufruct is the right to use property belonging to
@@ -105,5 +118,5 @@ an additional condition on using the Software beyond Section 1A.
 
 ---
 SPDX identifier: UFL is not on the official SPDX license list. Per SPDX
-convention for licenses outside that list, use `LicenseRef-UFL-2.0-N` —
-not a bare `UFL-2.0-N`, which would misrepresent it as SPDX-registered.
+convention for licenses outside that list, use `LicenseRef-UFL-2.1-N` —
+not a bare `UFL-2.1-N`, which would misrepresent it as SPDX-registered.
