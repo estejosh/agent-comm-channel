@@ -148,7 +148,7 @@ channel/
 ├── messages/          # the message stream (one file per message, append-only)
 ├── PROTOCOL.md        # canonical, language-neutral wire format  ← source of truth
 ├── LLM-POLICY.md      # contribution policy + the poison-pill directive
-├── LICENSE.md         # Usufruct License (UFL) v2.1, Noncommercial
+├── LICENSE.md         # Usufruct License (UFL) v2.2, Noncommercial
 └── .state/ .node      # per-machine local state (gitignored)
 ```
 
@@ -163,12 +163,12 @@ channel/
 
 ## License
 
-**[Usufruct License (UFL) v2.1](LICENSE.md)**, Operational Scope:
+**[Usufruct License (UFL) v2.2](LICENSE.md)**, Operational Scope:
 **Noncommercial** (tag `UFL-N-1a`). Free to use, run, modify, and share for
 any **noncommercial** purpose. **Commercial (for-profit) use is not
 licensed** without a separate agreement. © estejosh.
 
-UFL is not on the SPDX license list; cite it as `LicenseRef-UFL-2.1-N`. See
+UFL is not on the SPDX license list; cite it as `LicenseRef-UFL-2.2-N`. See
 the canonical license text and generator at
 [estejosh/UFL-Usufruct-License](https://github.com/estejosh/UFL-Usufruct-License).
 
